@@ -524,6 +524,7 @@ fun OpahApp(
                 CameraGroupViewScreen(
                     state = cameraGroupView,
                     preferRtpTcp = state.settings.preferRtpTcp,
+                    stretchedCameraNames = state.settings.stretchedCameraNames,
                     pictureInPictureAvailable = pictureInPictureAvailable,
                     pictureInPictureActive = pictureInPictureActive,
                     onEnterPictureInPicture = onEnterPictureInPicture,
@@ -546,6 +547,7 @@ fun OpahApp(
                 val monitor = requireNotNull(state.monitorMode)
                 MonitorModeScreen(
                     state = monitor,
+                    stretchedCameraNames = state.settings.stretchedCameraNames,
                     onPreset = viewModel::setMonitorPreset,
                     onManualCamera = viewModel::selectMonitorCamera,
                     onPlaybackReady = viewModel::monitorPlaybackReady,
