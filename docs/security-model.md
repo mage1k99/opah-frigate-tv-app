@@ -84,7 +84,13 @@ This section is optional and is intended for developers and security reviewers.
   it does not mark the item reviewed in Frigate.
 - Web requests reject redirects so a password or signed-in session is not
   automatically resent to a different address.
-- Secure connections use Android's normal certificate and hostname checks.
+- Secure connections use Android's normal certificate and hostname checks by
+  default. An explicit, off-by-default "Allow unverified certificate" setting
+  on the connection screen lets you temporarily skip those checks for a
+  specific server, for example while testing a self-signed certificate. The
+  setting is always visibly labeled as not recommended; Opah never enables it
+  on its own, and it should be turned back off once the server has a
+  verified certificate.
 - Diagnostics use safe error categories rather than raw responses, cookies,
   addresses, or stack traces.
 - Before opening a downloaded update, Opah checks its Android package, version,

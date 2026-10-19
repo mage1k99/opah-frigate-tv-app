@@ -3430,6 +3430,7 @@ internal class NativeOpahController(
                     profile?.username.orEmpty(),
                     profile?.rtspHostOverride.orEmpty(),
                     profile?.rtspPort?.toString() ?: "8554",
+                    profile?.allowUnverifiedTls ?: false,
                 )
             })
             add(action("connection:rtsp:edit", "Change live video route", "Does not sign out or change the Frigate account", "Open") {
@@ -3710,6 +3711,7 @@ internal class NativeOpahController(
                         profile?.username.orEmpty(),
                         profile?.rtspHostOverride.orEmpty(),
                         profile?.rtspPort?.toString() ?: "8554",
+                        profile?.allowUnverifiedTls ?: false,
                     )
                 })
             },
@@ -5038,6 +5040,7 @@ internal class NativeOpahController(
         initialUsername: String,
         initialRtspHost: String,
         initialRtspPort: String,
+        initialAllowUnverifiedTls: Boolean = false,
     ) {
         var submission: ConnectionFormSubmission? = null
         var clearPassword: (() -> Unit)? = null
@@ -5165,6 +5168,37 @@ internal class NativeOpahController(
                 topMargin = activity.dp(8)
             }
         }
+        var allowUnverifiedTls = initialAllowUnverifiedTls
+        val unverifiedTlsWarning = TextView(activity).apply {
+            setText(R.string.native_allow_unverified_tls_warning)
+            textSize = 12.5f
+            setTextColor(NativeTheme.palette.secondaryText)
+            setPadding(activity.dp(2), activity.dp(3), 0, activity.dp(5))
+            visibility = View.GONE
+        }
+        lateinit var unverifiedTlsChoice: TextView
+        fun updateUnverifiedTlsChoice() {
+            unverifiedTlsChoice.text = if (allowUnverifiedTls) {
+                "Allow unverified certificate  •  On (not recommended, temporary only)"
+            } else {
+                "Allow unverified certificate  •  Off (recommended)"
+            }
+            unverifiedTlsChoice.contentDescription = if (allowUnverifiedTls) {
+                "Unverified certificates are allowed for this server, not recommended, select to turn off"
+            } else {
+                "Unverified certificates are rejected for this server, select to allow temporarily"
+            }
+            unverifiedTlsWarning.visibility = if (allowUnverifiedTls) View.VISIBLE else View.GONE
+        }
+        unverifiedTlsChoice = dialogButton("") {
+            allowUnverifiedTls = !allowUnverifiedTls
+            updateUnverifiedTlsChoice()
+        }.apply {
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, activity.dp(44)).apply {
+                topMargin = activity.dp(8)
+            }
+        }
         val form = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             addView(
@@ -5179,9 +5213,12 @@ internal class NativeOpahController(
             addView(labeledDialogField("Password • not used on port 5000", fields[2]))
             addView(liveVideoChoice)
             addView(liveVideoFields)
+            addView(unverifiedTlsChoice)
+            addView(unverifiedTlsWarning)
         }
         updateCredentialFields()
         updateLiveVideoAddressChoice()
+        updateUnverifiedTlsChoice()
         val formScroll = ScrollView(activity).apply {
             isFillViewport = false
             overScrollMode = View.OVER_SCROLL_NEVER
@@ -5202,9 +5239,15 @@ internal class NativeOpahController(
             submission?.submit(testOnly) { result ->
                 val arguments = fields.map { it.text.toString() }
                 if (testOnly) {
-                    viewModel.testConnection(arguments[0], arguments[1], arguments[2], arguments[3], arguments[4], result)
+                    viewModel.testConnection(
+                        arguments[0], arguments[1], arguments[2], arguments[3], arguments[4],
+                        allowUnverifiedTls, result,
+                    )
                 } else {
-                    viewModel.connect(arguments[0], arguments[1], arguments[2], arguments[3], arguments[4], result)
+                    viewModel.connect(
+                        arguments[0], arguments[1], arguments[2], arguments[3], arguments[4],
+                        allowUnverifiedTls, result,
+                    )
                 }
             }
         }

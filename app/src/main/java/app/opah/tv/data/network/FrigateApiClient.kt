@@ -28,9 +28,15 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import java.security.KeyStore
+import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLHandshakeException
 import javax.net.ssl.SSLPeerUnverifiedException
+import javax.net.ssl.TrustManagerFactory
+import javax.net.ssl.X509TrustManager
 
 class FrigateApiClient(
     val httpClient: OkHttpClient,
@@ -622,7 +628,14 @@ class FrigateApiClient(
         is SSLPeerUnverifiedException, is SSLHandshakeException -> OpahException(
             OpahFailure(
                 OpahErrorCode.TLS_FAILURE,
-                "TLS certificate validation failed. Opah does not bypass certificate checks.",
+                if (InsecureTlsGate.enabled) {
+                    "The TLS handshake failed even with certificate verification disabled. " +
+                        "Check the server address and port."
+                } else {
+                    "TLS certificate validation failed. Turn on \"Allow unverified certificate\" " +
+                        "in the connection's advanced settings only if you understand the risk, " +
+                        "or fix the server's certificate."
+                },
                 RecoveryAction.CHECK_SERVER_URL,
                 retryable = false,
             ),
@@ -683,16 +696,52 @@ class FrigateApiClient(
         private const val MAX_SEARCH_TEXT_LENGTH = 160
         private const val EXPORT_MEDIA_PREFIX = "/media/frigate/exports/"
 
-        fun defaultClient(cookieJar: CookieJar): OkHttpClient = OkHttpClient.Builder()
-            .cookieJar(cookieJar)
-            // Keep credentials and cookies on the canonical URL the user entered.
-            .followRedirects(false)
-            .followSslRedirects(false)
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .writeTimeout(20, TimeUnit.SECONDS)
-            .callTimeout(30, TimeUnit.SECONDS)
-            .build()
+        fun defaultClient(cookieJar: CookieJar): OkHttpClient {
+            val (sslSocketFactory, trustManager) = gatedTlsTrust()
+            return OkHttpClient.Builder()
+                .cookieJar(cookieJar)
+                // Keep credentials and cookies on the canonical URL the user entered.
+                .followRedirects(false)
+                .followSslRedirects(false)
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(20, TimeUnit.SECONDS)
+                .writeTimeout(20, TimeUnit.SECONDS)
+                .callTimeout(30, TimeUnit.SECONDS)
+                .sslSocketFactory(sslSocketFactory, trustManager)
+                .hostnameVerifier { hostname, session ->
+                    InsecureTlsGate.enabled ||
+                        HttpsURLConnection.getDefaultHostnameVerifier().verify(hostname, session)
+                }
+                .build()
+        }
+
+        /**
+         * Wraps the platform's default trust manager so [InsecureTlsGate] can opt a
+         * connection out of certificate verification on demand, without needing a
+         * second OkHttpClient instance for every class that talks to Frigate.
+         */
+        private fun gatedTlsTrust(): Pair<javax.net.ssl.SSLSocketFactory, X509TrustManager> {
+            val factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+            factory.init(null as KeyStore?)
+            val platformTrustManager = factory.trustManagers
+                .filterIsInstance<X509TrustManager>()
+                .first()
+            val gatedTrustManager = object : X509TrustManager {
+                override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) =
+                    platformTrustManager.checkClientTrusted(chain, authType)
+
+                override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
+                    if (InsecureTlsGate.enabled) return
+                    platformTrustManager.checkServerTrusted(chain, authType)
+                }
+
+                override fun getAcceptedIssuers(): Array<X509Certificate> =
+                    platformTrustManager.acceptedIssuers
+            }
+            val sslContext = SSLContext.getInstance("TLS")
+            sslContext.init(null, arrayOf(gatedTrustManager), null)
+            return sslContext.socketFactory to gatedTrustManager
+        }
     }
 }
 

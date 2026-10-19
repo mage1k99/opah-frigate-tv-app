@@ -5,6 +5,7 @@ data class ConnectionProfile(
     val username: String,
     val rtspHostOverride: String? = null,
     val rtspPort: Int = 8554,
+    val allowUnverifiedTls: Boolean = false,
 ) {
     val usesUnauthenticatedFrigatePort: Boolean
         get() = runCatching { java.net.URI(apiBaseUrl).port == 5000 }.getOrDefault(false)

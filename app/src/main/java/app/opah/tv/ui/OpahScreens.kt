@@ -285,8 +285,8 @@ internal fun StartupRecoveryScreen(
 internal fun ConnectionSetupScreen(
     state: Phase0UiState,
     onDismissError: () -> Unit,
-    onTestConnection: (String, String, String, String, String) -> Unit,
-    onConnect: (String, String, String, String, String) -> Unit,
+    onTestConnection: (String, String, String, String, String, Boolean) -> Unit,
+    onConnect: (String, String, String, String, String, Boolean) -> Unit,
     onForget: () -> Unit,
     onExitRequested: () -> Unit,
 ) {
@@ -302,6 +302,7 @@ internal fun ConnectionSetupScreen(
     }
     var rtspHost by rememberSaveable { mutableStateOf(saved?.rtspHostOverride.orEmpty()) }
     var rtspPort by rememberSaveable { mutableStateOf((saved?.rtspPort ?: 8554).toString()) }
+    var allowUnverifiedTls by rememberSaveable { mutableStateOf(saved?.allowUnverifiedTls ?: false) }
     var showExitConfirmation by rememberSaveable { mutableStateOf(false) }
     val unauthenticatedPort = ConnectionProfileFactory.targetsUnauthenticatedFrigatePort(serverUrl)
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -312,7 +313,8 @@ internal fun ConnectionSetupScreen(
         serverUrl != saved?.apiBaseUrl.orEmpty() ||
         username != savedUsername ||
         rtspHost != saved?.rtspHostOverride.orEmpty() ||
-        rtspPort != (saved?.rtspPort ?: 8554).toString()
+        rtspPort != (saved?.rtspPort ?: 8554).toString() ||
+        allowUnverifiedTls != (saved?.allowUnverifiedTls ?: false)
 
     BackHandler(enabled = state.loading || hasDraft) {
         if (!state.loading) showExitConfirmation = true
@@ -340,6 +342,7 @@ internal fun ConnectionSetupScreen(
         username = saved.username.takeUnless { saved.usesUnauthenticatedFrigatePort }.orEmpty()
         rtspHost = saved.rtspHostOverride.orEmpty()
         rtspPort = saved.rtspPort.toString()
+        allowUnverifiedTls = saved.allowUnverifiedTls
     }
 
     Row(
@@ -490,14 +493,34 @@ internal fun ConnectionSetupScreen(
                 }
             }
             item {
+                FlatSettingsToggleRow(
+                    focusKey = "setup_allow_unverified_tls",
+                    label = "Allow unverified certificate",
+                    value = allowUnverifiedTls,
+                    enabled = !state.loading,
+                    onChange = { allowUnverifiedTls = it },
+                )
+            }
+            if (allowUnverifiedTls) {
+                item {
+                    ScreenMessage(
+                        message = "Skips certificate checks for this server, the same way clicking " +
+                            "through a browser's warning does, so anyone on the network could " +
+                            "intercept the connection • use only to confirm connectivity, then " +
+                            "switch to a verified certificate",
+                        isError = true,
+                    )
+                }
+            }
+            item {
                 Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     Button(
-                        onClick = { onTestConnection(serverUrl, username, password, rtspHost, rtspPort) },
+                        onClick = { onTestConnection(serverUrl, username, password, rtspHost, rtspPort, allowUnverifiedTls) },
                         enabled = !state.loading,
                         modifier = Modifier.focusRequester(testConnectionFocusRequester),
                     ) { Text("Test connection") }
                     Button(
-                        onClick = { onConnect(serverUrl, username, password, rtspHost, rtspPort) },
+                        onClick = { onConnect(serverUrl, username, password, rtspHost, rtspPort, allowUnverifiedTls) },
                         enabled = !state.loading,
                     ) { Text("Connect") }
                     if (saved != null) {

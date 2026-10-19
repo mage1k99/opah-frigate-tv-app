@@ -16,6 +16,7 @@ import app.opah.tv.data.DiscoveryBootstrap
 import app.opah.tv.data.sanitizeRecentActivitySearches
 import app.opah.tv.data.compatibilityIdentityComponents
 import app.opah.tv.data.network.AuthenticationExpiredException
+import app.opah.tv.data.network.InsecureTlsGate
 import app.opah.tv.data.network.InvalidCredentialsException
 import app.opah.tv.data.network.OpahErrorCode
 import app.opah.tv.data.network.PtzCommand
@@ -893,8 +894,9 @@ class Phase0ViewModel(application: Application) : AndroidViewModel(application) 
         password: String,
         rtspHostOverride: String,
         rtspPortText: String,
+        allowUnverifiedTls: Boolean = false,
     ) {
-        submitConnection(rawUrl, username, password, rtspHostOverride, rtspPortText, testOnly = false)
+        submitConnection(rawUrl, username, password, rtspHostOverride, rtspPortText, allowUnverifiedTls, testOnly = false)
     }
 
     fun testConnection(
@@ -903,8 +905,9 @@ class Phase0ViewModel(application: Application) : AndroidViewModel(application) 
         password: String,
         rtspHostOverride: String,
         rtspPortText: String,
+        allowUnverifiedTls: Boolean = false,
     ) {
-        submitConnection(rawUrl, username, password, rtspHostOverride, rtspPortText, testOnly = true)
+        submitConnection(rawUrl, username, password, rtspHostOverride, rtspPortText, allowUnverifiedTls, testOnly = true)
     }
 
     internal fun connect(
@@ -913,8 +916,9 @@ class Phase0ViewModel(application: Application) : AndroidViewModel(application) 
         password: String,
         rtspHostOverride: String,
         rtspPortText: String,
+        allowUnverifiedTls: Boolean,
         onResult: (Result<String>) -> Unit,
-    ): Job? = submitConnection(rawUrl, username, password, rtspHostOverride, rtspPortText, false, onResult)
+    ): Job? = submitConnection(rawUrl, username, password, rtspHostOverride, rtspPortText, allowUnverifiedTls, false, onResult)
 
     internal fun testConnection(
         rawUrl: String,
@@ -922,8 +926,9 @@ class Phase0ViewModel(application: Application) : AndroidViewModel(application) 
         password: String,
         rtspHostOverride: String,
         rtspPortText: String,
+        allowUnverifiedTls: Boolean,
         onResult: (Result<String>) -> Unit,
-    ): Job? = submitConnection(rawUrl, username, password, rtspHostOverride, rtspPortText, true, onResult)
+    ): Job? = submitConnection(rawUrl, username, password, rtspHostOverride, rtspPortText, allowUnverifiedTls, true, onResult)
 
     private fun submitConnection(
         rawUrl: String,
@@ -931,6 +936,7 @@ class Phase0ViewModel(application: Application) : AndroidViewModel(application) 
         password: String,
         rtspHostOverride: String,
         rtspPortText: String,
+        allowUnverifiedTls: Boolean,
         testOnly: Boolean,
         onResult: ((Result<String>) -> Unit)? = null,
     ): Job? {
@@ -943,6 +949,7 @@ class Phase0ViewModel(application: Application) : AndroidViewModel(application) 
             username = username,
             rtspHostOverride = rtspHostOverride,
             rtspPort = rtspPortText.toIntOrNull() ?: -1,
+            allowUnverifiedTls = allowUnverifiedTls,
         ).getOrElse { error ->
             if (onResult == null) {
                 _state.update { it.copy(errorMessage = error.message ?: "Invalid connection settings") }
@@ -951,6 +958,9 @@ class Phase0ViewModel(application: Application) : AndroidViewModel(application) 
             }
             return null
         }
+        // Honor the toggle for this attempt immediately, even before it's saved.
+        // Test connection against an unsaved profile needs it too.
+        InsecureTlsGate.enabled = profile.allowUnverifiedTls
         val generation = ++connectionRequestGeneration
         val previousStatus = _state.value.statusMessage
         if (!testOnly) enrichmentJob?.cancel()
@@ -3407,6 +3417,7 @@ class Phase0ViewModel(application: Application) : AndroidViewModel(application) 
             username = profile.username,
             rtspHostOverride = hostOverride,
             rtspPortText = portText,
+            allowUnverifiedTls = profile.allowUnverifiedTls,
         ) ?: return
         viewModelScope.launch {
             profileRepository.save(updated)
@@ -6576,12 +6587,14 @@ class Phase0ViewModel(application: Application) : AndroidViewModel(application) 
         username: String,
         rtspHostOverride: String,
         rtspPortText: String,
+        allowUnverifiedTls: Boolean = false,
     ): ConnectionProfile? {
         val profileResult = ConnectionProfileFactory.create(
             rawApiBaseUrl = rawUrl,
             username = username,
             rtspHostOverride = rtspHostOverride,
             rtspPort = rtspPortText.toIntOrNull() ?: -1,
+            allowUnverifiedTls = allowUnverifiedTls,
         )
         return profileResult.getOrElse { error ->
             _state.update { it.copy(errorMessage = error.message ?: "Invalid connection settings") }

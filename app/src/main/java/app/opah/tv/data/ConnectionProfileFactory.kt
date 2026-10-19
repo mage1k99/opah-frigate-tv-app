@@ -16,6 +16,7 @@ object ConnectionProfileFactory {
         username: String,
         rtspHostOverride: String? = null,
         rtspPort: Int = 8554,
+        allowUnverifiedTls: Boolean = false,
     ): Result<ConnectionProfile> = runCatching {
         require(rtspPort in 1..65535) { "RTSP port must be between 1 and 65535." }
 
@@ -63,6 +64,7 @@ object ConnectionProfileFactory {
             username = if (unauthenticated) "anonymous" else username.trim(),
             rtspHostOverride = hostOverride,
             rtspPort = rtspPort,
+            allowUnverifiedTls = allowUnverifiedTls,
         )
     }
 }

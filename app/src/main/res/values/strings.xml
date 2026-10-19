@@ -18,6 +18,7 @@
     <string name="native_live_video_route_help">Live video normally uses the Frigate address • change this only when your network requires another host or RTSP port</string>
     <string name="native_separate_live_video_help">Use this only when live video must reach a different host or port than the Frigate address above</string>
     <string name="native_default_rtsp_port" translatable="false">8554</string>
+    <string name="native_allow_unverified_tls_warning">Skips certificate checks for this server, the same way clicking through a browser\'s warning does, so anyone on the network could intercept the connection • use only to confirm connectivity, then switch to a verified certificate</string>
     <string name="native_time_picker_selected_time">%1$d:%2$02d %3$s</string>
     <string name="native_time_picker_hour">Hour     %1$d     ‹  ›</string>
     <string name="native_time_picker_minute">Minute     %1$02d     ‹  ›</string>
