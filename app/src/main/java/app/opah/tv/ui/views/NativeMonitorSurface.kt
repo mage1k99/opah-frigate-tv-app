@@ -19,7 +19,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import app.opah.tv.OpahApplication
 import app.opah.tv.R
@@ -48,6 +47,7 @@ import kotlinx.coroutines.withContext
 internal class NativeMonitorSurface(
     private val activity: ComponentActivity,
     initialState: MonitorModeUiState,
+    initialStretchedCameraNames: Set<String>,
     private val cachedBitmap: (String) -> Bitmap?,
     private val refreshBitmap: suspend (String, Int) -> Bitmap?,
     private val onPreset: (MonitorPreset) -> Unit,
@@ -75,6 +75,7 @@ internal class NativeMonitorSurface(
     private val awakeButton: TextView
     private val exitButton: TextView
     private var state = initialState
+    private var stretchedCameraNames = initialStretchedCameraNames
     private var visualKey: String? = null
     private var visualJob: Job? = null
     private var chromeHideJob: Job? = null
@@ -153,15 +154,16 @@ internal class NativeMonitorSurface(
                 bottomMargin = activity.dp(24)
             },
         )
-        update(initialState)
+        update(initialState, initialStretchedCameraNames)
         controls.post {
             presetButtons[state.preset]?.requestFocus()
             scheduleChromeHide()
         }
     }
 
-    fun update(updated: MonitorModeUiState) {
+    fun update(updated: MonitorModeUiState, updatedStretchedCameraNames: Set<String>) {
         state = updated
+        stretchedCameraNames = updatedStretchedCameraNames
         keepScreenOn = updated.keepScreenAwake
         title.text = updated.title
         status.text = monitorStatus(updated)
@@ -187,14 +189,15 @@ internal class NativeMonitorSurface(
         val patrol = updated.arbitration.patrolCameraId
             ?.let { id -> updated.cameras.firstOrNull { it.name == id } }
         val visible = updated.cameras.filter { it.name in updated.visibleCameraIds }
+        val stretchSuffix = stretchedCameraNames.sorted().joinToString(",")
         val nextVisualKey = when {
             promoted != null &&
                 updated.arbitration.promotion.presentation == MonitorPresentationKind.LIVE &&
                 updated.liveCompatibilityRequestId != null ->
-                "live:${updated.liveCompatibilityRequestId}:${updated.audioEnabled}"
-            promoted != null -> "snapshot:${promoted.name}"
-            patrol != null -> "snapshot:${patrol.name}"
-            else -> "grid:${visible.joinToString { it.name }}"
+                "live:${updated.liveCompatibilityRequestId}:${updated.audioEnabled}:$stretchSuffix"
+            promoted != null -> "snapshot:${promoted.name}:$stretchSuffix"
+            patrol != null -> "snapshot:${patrol.name}:$stretchSuffix"
+            else -> "grid:${visible.joinToString { it.name }}:$stretchSuffix"
         }
         if (nextVisualKey == visualKey) return
         val focusedTileKey = visualHost.findFocus()?.tag as? String
@@ -205,7 +208,11 @@ internal class NativeMonitorSurface(
         visualHost.removeAllViews()
         cameraLabels.clear()
         when {
-            nextVisualKey.startsWith("live:") -> showLive(requireNotNull(updated.liveCompatibilityRequestId), !updated.audioEnabled)
+            nextVisualKey.startsWith("live:") -> showLive(
+                requireNotNull(updated.liveCompatibilityRequestId),
+                !updated.audioEnabled,
+                requireNotNull(promoted).name in stretchedCameraNames,
+            )
             promoted != null -> showSnapshot(promoted)
             patrol != null -> showSnapshot(patrol)
             visible.isNotEmpty() -> showGrid(visible)
@@ -273,10 +280,10 @@ internal class NativeMonitorSurface(
         return super.dispatchKeyEvent(event)
     }
 
-    private fun showLive(requestId: String, videoOnly: Boolean) {
+    private fun showLive(requestId: String, videoOnly: Boolean, stretched: Boolean) {
         val playerView = PlayerView(activity).apply {
             useController = false
-            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            resizeMode = nativePlaybackResizeMode(stretched)
             isFocusable = false
             setBackgroundColor(Color.BLACK)
         }
@@ -403,9 +410,10 @@ internal class NativeMonitorSurface(
 
     private fun addPreview(host: FrameLayout, camera: Camera, height: Int) {
         val cached = cachedBitmap(camera.name)
+        val stretched = camera.name in stretchedCameraNames
         val image = ImageView(activity).apply {
             tag = "monitor:image:${camera.name}"
-            scaleType = ImageView.ScaleType.CENTER_CROP
+            scaleType = if (stretched) ImageView.ScaleType.CENTER_CROP else ImageView.ScaleType.FIT_CENTER
             setBackgroundColor(NativeTheme.palette.panel)
             cached?.let(::setImageBitmap)
         }

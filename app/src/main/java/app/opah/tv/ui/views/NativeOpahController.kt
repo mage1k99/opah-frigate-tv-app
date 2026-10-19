@@ -3758,6 +3758,7 @@ internal class NativeOpahController(
             state = group,
             imageLoadedAtMillis = { cameraName -> viewModel.cachedCameraImage(cameraName)?.loadedAtMillis },
             preferRtpTcp = state.settings.preferRtpTcp,
+            stretchedCameraNames = state.settings.stretchedCameraNames,
             cachedBitmap = { cameraName -> viewModel.cachedCameraImage(cameraName)?.bitmap },
             refreshBitmap = { cameraName, height ->
                 viewModel.refreshCameraImage(cameraName, height).getOrNull()?.bitmap
@@ -3779,7 +3780,7 @@ internal class NativeOpahController(
         val monitor = requireNotNull(state.monitorMode)
         val surfaceKey = "surface:monitor:${monitor.title}"
         if (activeSurfaceKey == surfaceKey && activeMonitor != null) {
-            activeMonitor?.update(monitor)
+            activeMonitor?.update(monitor, state.settings.stretchedCameraNames)
             return
         }
         clearActiveSurface()
@@ -3789,6 +3790,7 @@ internal class NativeOpahController(
         val surface = NativeMonitorSurface(
             activity = activity,
             initialState = monitor,
+            initialStretchedCameraNames = state.settings.stretchedCameraNames,
             imageLoadedAtMillis = { cameraName -> viewModel.cachedCameraImage(cameraName)?.loadedAtMillis },
             cachedBitmap = { cameraName -> viewModel.cachedCameraImage(cameraName)?.bitmap },
             refreshBitmap = { cameraName, height ->

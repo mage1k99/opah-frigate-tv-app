@@ -19,7 +19,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import app.opah.tv.BuildConfig
 import app.opah.tv.OpahApplication
@@ -44,6 +43,7 @@ internal class NativeCameraGroupSurface(
     private val activity: ComponentActivity,
     private val state: CameraGroupViewUiState,
     private val preferRtpTcp: Boolean,
+    private val stretchedCameraNames: Set<String>,
     private val cachedBitmap: (String) -> Bitmap?,
     private val refreshBitmap: suspend (String, Int) -> Bitmap?,
     private val pictureInPictureAvailable: Boolean,
@@ -213,17 +213,18 @@ internal class NativeCameraGroupSurface(
 
     private fun tile(index: Int): View {
         val stream = state.streams[index]
+        val stretched = stream.camera.name in stretchedCameraNames
         return FrameLayout(activity).apply {
             setBackgroundColor(Color.BLACK)
             val snapshot = ImageView(activity).apply {
-                scaleType = ImageView.ScaleType.CENTER_CROP
+                scaleType = if (stretched) ImageView.ScaleType.CENTER_CROP else ImageView.ScaleType.FIT_CENTER
                 setBackgroundColor(NativeTheme.palette.panel)
                 cachedBitmap(stream.camera.name)?.let(::setImageBitmap)
             }
             addView(snapshot, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
             val playerView = PlayerView(activity).apply {
                 useController = false
-                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                resizeMode = nativePlaybackResizeMode(stretched)
                 isFocusable = false
                 visibility = View.INVISIBLE
                 setBackgroundColor(Color.TRANSPARENT)
